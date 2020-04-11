@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: Cloud9BootStrapper
+    Description: SAR App that BootStraps an AWS Cloud9 Environment
+    Author: Richard Boyd
+    SpdxLicenseId: Apache-2.0
+    LicenseUrl: LICENSE
+    ReadmeUrl: README.md
+    Labels: ['Cloud9']
+    HomePageUrl: https://github.com/richardhboyd/Cloud9Bootstrap
+    SemanticVersion: 0.1.0
+    SourceCodeUrl: https://github.com/richardhboyd/Cloud9Bootstrap
+
+Parameters:
+  Cloud9Environment:
+    Description: "!Ref for a AWS::Cloud9::EnvironmentEC2"
+    Type: String
+  EBSVolumeSize:
+    Description: "Size of EBS Volue"
+    Default: 50
+    Type: Number
+  UserData:
+    MaxLength: 4096
+    Description: Base64 encoded userdata script.
+    Type: String
+
+Resources:
+  HelloWorldFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: hello_world/
+      Handler: app.handler
+      Runtime: python3.6
+      Timeout: 900
+      Policies:
+        - AWSLambdaExecute
+        - 
+            Version: '2012-10-17'
+            Statement:
+              # These actions do not have a corresponding Resource
+              - Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:DescribeInstanceInformation
+                  - ec2:DescribeInstances
+                  - ec2:DescribeInstanceStatus
+                  - ec2:DescribeInstanceAttribute
+                  - ec2:DescribeIamInstanceProfileAssociations
+                  - ec2:DescribeVolumes
+                  - ec2:DesctibeVolumeAttribute
+                  - ec2:DescribeVolumesModifications
+                  - ec2:ReplaceIamInstanceProfileAssociation
+                  - ec2:ReportInstanceStatus
+                  - ec2:DescribeVolumeStatus
+                  - ec2:ModifyVolume
+                  - ssm:SendCommand
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ec2:AssociateIamInstanceProfile
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition: 
+                  StringLike: {"ec2:ResourceTag/aws:cloud9:environment": !Ref Cloud9Environment}
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt Cloud9Role.Arn
+              # Lambda Custom Resource Permissions
+              - Effect: Allow
+                Action:
+                  - 'events:PutRule'
+                  - 'events:DeleteRule'
+                  - 'events:PutTargets'
+                  - 'events:RemoveTargets'
+                  - 'lambda:AddPermission'
+                  - 'lambda:RemovePermission'
+                Resource: '*'
+  Cloud9Role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Path: /
+      Policies:
+        - PolicyName: describe-ec2
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:DescribeVolumes'
+                  - 'ec2:ModifyVolume'
+                Resource: '*'
+  Cloud9InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref Cloud9Role]
+
+  Bootstrap:
+    Type: AWS::CloudFormation::CustomResource
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt HelloWorldFunction.Arn
+      InstanceProfile: !Ref Cloud9InstanceProfile
+      EnvironmentId: !Ref Cloud9Environment
+      VolumeSize: !Ref EBSVolumeSize
+      Commands: !Ref UserData
