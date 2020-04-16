@@ -6,7 +6,7 @@ import base64
 from crhelper import CfnResource
 
 logger = logging.getLogger(__name__)
-helper = CfnResource(json_logging=True, log_level='DEBUG', boto_level='CRITICAL')
+helper = CfnResource(json_logging=True, log_level='DEBUG', boto_level='CRITICAL', polling_interval=3)
 
 try:
     ssm_client = boto3.client('ssm')
@@ -38,7 +38,11 @@ def send_command(instance_id, commands: [str]):
         return ssm_client.send_command(
             InstanceIds=[instance_id], 
             DocumentName='AWS-RunShellScript', 
-            Parameters={'commands': commands}
+            Parameters={'commands': commands},
+            CloudWatchOutputConfig={
+                'CloudWatchLogGroupName': 'ssm-output-{}'.format(instance_id),
+                'CloudWatchOutputEnabled': True
+    }
         )
     except ssm_client.exceptions.InvalidInstanceId:
         logger.debug("Failed to execute SSM command", exc_info=True)
@@ -83,19 +87,16 @@ def create(event, context):
 @helper.poll_create
 def poll_create(event, context):
     logger.info("Got create poll")
-    while True:
-        try:
-            cmd_output_response = get_command_output(helper.Data["InstanceId"], helper.Data["CommandId"])
-            if cmd_output_response:
-                break
-        except ssm_client.exceptions.InvocationDoesNotExist:
-            logger.debug('Invocation not available in SSM yet', exc_info=True)
-        if context.get_remaining_time_in_millis() < 20000:
-            return
-        sleep(15)
-    if cmd_output_response['StandardErrorContent']:
-        raise Exception("ssm command failed: " + cmd_output_response['StandardErrorContent'][:235])
-    return helper.Data["InstanceId"]
+    try:
+        cmd_output_response = get_command_output(helper.Data["InstanceId"], helper.Data["CommandId"])
+    except ssm_client.exceptions.InvocationDoesNotExist:
+        logger.debug('Invocation not available in SSM yet', exc_info=True)
+    if cmd_output_response:
+        if cmd_output_response['StandardErrorContent']:
+            raise Exception("ssm command failed: " + cmd_output_response['StandardErrorContent'][:235])
+        else:
+            return helper.Data["InstanceId"]
+    return
 
 
 @helper.update

@@ -5,6 +5,7 @@
 REGION=us-west-2
 S3_BUCKET_NAME=$(aws sts get-caller-identity --query "Account" --output text)-${REGION}-$(cat /dev/urandom | tr -dc 'a-z0-9' | fold -w 16 | head -n 1)
 aws s3 mb s3://${S3_BUCKET_NAME} --region $REGION
+# TODO Update Bucket Policy for SAR Access
 sam build
 sam package -t .aws-sam/build/template.yaml --s3-bucket $S3_BUCKET_NAME --output-template-file packaged.yaml
 sam publish -t packaged.yaml --region $REGION

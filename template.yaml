@@ -10,7 +10,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['Cloud9']
     HomePageUrl: https://github.com/richardhboyd/Cloud9Bootstrap
-    SemanticVersion: 0.1.0
+    SemanticVersion: 0.2.2
     SourceCodeUrl: https://github.com/richardhboyd/Cloud9Bootstrap
 
 Parameters:
